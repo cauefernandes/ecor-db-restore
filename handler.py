@@ -5,23 +5,12 @@ import shutil
 import zipfile
 import boto3
 
+
 rds_client = boto3.client('rds-data')
 db_name = os.environ['DB_NAME']
 db_arn = os.environ['DB_RESOURCE_ARN']
 secret_arn = os.environ['DB_SECRET_ARN']
 
-def hello(event, context):
-    body = {
-        "message": "Go Serverless v1.0! Your function executed successfully!",
-        "input": event
-    }
-
-    response = {
-        "statusCode": 200,
-        "body": json.dumps(body)
-    }
-
-    return response
 
 def download_restore_db(event, context):
     TEMP_ZIP_FILENAME = "/tmp/db.zip"
