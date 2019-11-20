@@ -52,35 +52,9 @@ functions:
     handler: handler.download_restore_db
     timeout: 900
 
-  # dbTransaction:
-  #   handler: handler.run_transaction
-  #   events:
-  #     - sqs:
-  #         arn:
-  #           Fn::GetAtt:
-  #             - transactionQueue
-  #             - Arn
-  #   iamRoleStatements:
-  #   - Effect: Allow
-  #     Action:
-  #       - sqs:ReceiveMessage
-  #     Resource:
-  #       - "Fn::GetAtt": [ transactionQueue, Arn ]
-  #   - Effect: Allow
-  #     Action:
-  #       - rds-data:ExecuteStatement
-  #     Resource: "*"
-  #   - Effect: Allow
-  #     Action:
-  #       - secretsmanager:GetSecretValue
-  #     Resource: ${self:provider.environment.DB_SECRET_ARN}
 
 resources:
-  # Resources:
-  #   transactionQueue:
-  #     Type: AWS::SQS::Queue
-  #     Properties:
-  #       QueueName: transactions
+
 
 plugins:
   - serverless-python-requirements
