@@ -1,0 +1,90 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: db-restore
+# app and org for use with dashboard.serverless.com
+#app: your-app-name
+#org: your-org-name
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+# frameworkVersion: "=X.X.X"
+
+provider:
+  name: aws
+  runtime: python3.7
+  stage: dev
+#  region: us-east-1
+  environment:
+    DB_NAME: ecor
+    DB_RESOURCE_ARN: arn:aws:rds:us-east-1:918810475415:cluster:ecor
+    DB_SECRET_ARN: ${file(./serverless.env.yml):dev.DB_SECRET_ARN}
+    DB_FILE_URL: https://ecor-db.s3.amazonaws.com/db.zip
+    # DB_FILE_URL: https://www.onetcenter.org/dl_files/database/db_24_0_mysql.zip
+  iamRoleStatements:
+  - Effect: Allow
+    Action:
+      - rds-data:ExecuteStatement
+      - rds-data:BeginTransaction
+      - rds-data:CommitTransaction
+    Resource: "*"
+  - Effect: Allow
+    Action:
+      - secretsmanager:GetSecretValue
+    Resource: ${self:provider.environment.DB_SECRET_ARN}
+
+
+functions:
+  hello:
+    handler: handler.hello
+
+  restoreDb:
+    handler: handler.download_restore_db
+    timeout: 900
+
+  # dbTransaction:
+  #   handler: handler.run_transaction
+  #   events:
+  #     - sqs:
+  #         arn:
+  #           Fn::GetAtt:
+  #             - transactionQueue
+  #             - Arn
+  #   iamRoleStatements:
+  #   - Effect: Allow
+  #     Action:
+  #       - sqs:ReceiveMessage
+  #     Resource:
+  #       - "Fn::GetAtt": [ transactionQueue, Arn ]
+  #   - Effect: Allow
+  #     Action:
+  #       - rds-data:ExecuteStatement
+  #     Resource: "*"
+  #   - Effect: Allow
+  #     Action:
+  #       - secretsmanager:GetSecretValue
+  #     Resource: ${self:provider.environment.DB_SECRET_ARN}
+
+resources:
+  # Resources:
+  #   transactionQueue:
+  #     Type: AWS::SQS::Queue
+  #     Properties:
+  #       QueueName: transactions
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: non-linux
