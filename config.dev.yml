@@ -1,4 +1,4 @@
 DB_NAME: ecor
 DB_RESOURCE_ARN: arn:aws:rds:us-east-1:918810475415:cluster:ecor
-DB_SECRET_ARN: 'arn:aws:secretsmanager:us-east-1:918810475415:secret:ecor-8MqoL8'
-DB_FILE_URL: https://ecor-db.s3.amazonaws.com/db.zip
+DB_SECRET_ARN: arn:aws:secretsmanager:us-east-1:918810475415:secret:ecor-8MqoL8
+DB_FILE_URL: https://www.onetcenter.org/dl_files/database/db_24_0_mysql.zip

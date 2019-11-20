@@ -11,7 +11,6 @@ provider:
     DB_RESOURCE_ARN: ${file(./config.${self:custom.stage}.yml):DB_RESOURCE_ARN}
     DB_SECRET_ARN: ${file(./config.${self:custom.stage}.yml):DB_SECRET_ARN}
     DB_FILE_URL: ${file(./config.${self:custom.stage}.yml):DB_FILE_URL}
-    # DB_FILE_URL: https://www.onetcenter.org/dl_files/database/db_24_0_mysql.zip
   iamRoleStatements:
   - Effect: Allow
     Action:
