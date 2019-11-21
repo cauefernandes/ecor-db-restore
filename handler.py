@@ -11,12 +11,12 @@ import logging
 
 rds_client = boto3.client('rds-data')
 s3_client = boto3.client('s3')
+lambda_client = boto3.client('lambda')
 db_name = os.environ['DB_NAME']
 db_arn = os.environ['DB_RESOURCE_ARN']
 secret_arn = os.environ['DB_SECRET_ARN']
 bucket_name = os.environ['S3_BUCKET_NAME']
-transaction_no = 1
-
+transaction_no = 0
 
 def download_restore_db(event, context):
     TEMP_ZIP_FILENAME = "/tmp/db.zip"
@@ -40,6 +40,8 @@ def download_restore_db(event, context):
     print("Starting restore...")
     drop_all_tables()
 
+    global transaction_no
+    transaction_no = 0
     for root, dirs, files in os.walk(DB_SCRIPTS_DIR):
         files = sorted( (f for f in files if f.endswith(".sql") and not f.startswith('.')))
         for file in files:
@@ -49,6 +51,18 @@ def download_restore_db(event, context):
     print("Deleting temp files...")
     os.remove(TEMP_ZIP_FILENAME)
     shutil.rmtree(DB_SCRIPTS_DIR)
+
+    account_id = context.invoked_function_arn.split(":")[4]
+    function_name = os.environ['FUNCTION_ARN'] % account_id
+    response = lambda_client.invoke(
+        FunctionName=function_name,
+        InvocationType='Event',
+        Payload='{"total": %d}' % transaction_no
+    )
+    if response['StatusCode'] == 202:
+        print("Started running %d transactions in order" % transaction_no)
+    else:
+        print("Failed to start running transactions")
 
 
 def process_script_file(file_path):
@@ -62,9 +76,9 @@ def process_script_file(file_path):
             if line == "/*! START TRANSACTION */;\n":
                 sql = ""
             elif line == "/*! COMMIT */;\n":
-                upload_transaction(sql, transaction_no)
-                print("sent a transaction of %d" % len(sql))
                 transaction_no += 1
+                upload_transaction(sql, transaction_no)
+                print("sent transaction %d of size %d" % (transaction_no, len(sql)))
             else:
                 sql += line
             line = fp.readline()
@@ -77,14 +91,14 @@ def run_transaction(event, context):
     start_time = time.time()
     transaction_id = db_start_transaction()
 
-    record = event['Records'][0]
-    s3bucket = record['s3']['bucket']['name']
-    s3object = record['s3']['object']['key']
+    transaction_no = event.get('transaction', 1)
+    total_count = event.get('total', 1)
+    filename = "%d.sql" % transaction_no
 
-    print("Downloading " + s3object)
-    file_path = os.path.join(DOWNLOAD_DIR, s3object)
+    print("Downloading " + filename)
+    file_path = os.path.join(DOWNLOAD_DIR, filename)
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-    s3_client.download_file(s3bucket, s3object, file_path)
+    s3_client.download_file(bucket_name, filename, file_path)
 
     with open(file_path) as fp:
         line = fp.readline()
@@ -100,9 +114,18 @@ def run_transaction(event, context):
 
     status = db_commit_transaction(transaction_id)
     os.remove(file_path)
-    s3_client.delete_object(Bucket=bucket_name, Key=s3object)
+    s3_client.delete_object(Bucket=bucket_name, Key=filename)
     end_time = time.time()
-    print("Commited a transaction: " + status + " " + file_path + " for %d seconds" % (end_time - start_time))
+    print("Commited transaction %d: %s for %d seconds" % (transaction_no, status, (end_time - start_time)))
+
+    if transaction_no < total_count:
+        account_id = context.invoked_function_arn.split(":")[4]
+        function_name = os.environ['FUNCTION_ARN'] % account_id
+        lambda_client.invoke(
+            FunctionName=function_name,
+            InvocationType='Event',
+            Payload='{"transaction": %d, "total": %d}' % (transaction_no + 1, total_count)
+        )
 
 
 def upload_transaction(sql, transaction_no):

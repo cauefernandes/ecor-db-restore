@@ -12,6 +12,7 @@ provider:
     DB_SECRET_ARN: ${file(./config.${self:custom.stage}.yml):DB_SECRET_ARN}
     DB_FILE_URL: ${file(./config.${self:custom.stage}.yml):DB_FILE_URL}
     S3_BUCKET_NAME: ${file(./config.${self:custom.stage}.yml):S3_BUCKET_NAME}
+    FUNCTION_ARN: arn:aws:lambda:${self:provider.region}:%s:function:${self:service}-${self:provider.stage}-runTransaction
   iamRoleStatements:
   - Effect: Allow
     Action:
@@ -29,9 +30,9 @@ provider:
     Resource:
       - Fn::Join: ['/', [Fn::GetAtt: [ transactionBucket, Arn ], '*']]
   - Effect: Allow
-        Action:
-          - lambda:InvokeFunction
-        Resource: "*"
+    Action:
+      - lambda:InvokeFunction
+    Resource: "*"
 
 
 functions:
