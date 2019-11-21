@@ -11,6 +11,7 @@ provider:
     DB_RESOURCE_ARN: ${file(./config.${self:custom.stage}.yml):DB_RESOURCE_ARN}
     DB_SECRET_ARN: ${file(./config.${self:custom.stage}.yml):DB_SECRET_ARN}
     DB_FILE_URL: ${file(./config.${self:custom.stage}.yml):DB_FILE_URL}
+    S3_BUCKET_NAME: ${file(./config.${self:custom.stage}.yml):S3_BUCKET_NAME}
   iamRoleStatements:
   - Effect: Allow
     Action:
@@ -22,15 +23,32 @@ provider:
     Action:
       - secretsmanager:GetSecretValue
     Resource: ${self:provider.environment.DB_SECRET_ARN}
+  - Effect: Allow
+    Action:
+      - s3:*
+    Resource:
+      - Fn::Join: ['/', [Fn::GetAtt: [ transactionBucket, Arn ], '*']]
+  - Effect: Allow
+        Action:
+          - lambda:InvokeFunction
+        Resource: "*"
 
 
 functions:
   restoreDb:
     handler: handler.download_restore_db
     timeout: 900
+  runTransaction:
+    handler: handler.run_transaction
+    timeout: 900
 
 
 resources:
+  Resources:
+    transactionBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${self:provider.environment.S3_BUCKET_NAME}
 
 
 plugins:

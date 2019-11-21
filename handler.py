@@ -4,12 +4,18 @@ import urllib.request
 import shutil
 import zipfile
 import boto3
+from botocore.exceptions import ClientError
+import time
+import logging
 
 
 rds_client = boto3.client('rds-data')
+s3_client = boto3.client('s3')
 db_name = os.environ['DB_NAME']
 db_arn = os.environ['DB_RESOURCE_ARN']
 secret_arn = os.environ['DB_SECRET_ARN']
+bucket_name = os.environ['S3_BUCKET_NAME']
+transaction_no = 1
 
 
 def download_restore_db(event, context):
@@ -47,24 +53,73 @@ def download_restore_db(event, context):
 
 def process_script_file(file_path):
     print("Processing " + file_path)
-    
+    global transaction_no
+
     with open(file_path) as fp:
         line = fp.readline()
-        transaction_id = None
         sql = ""
         while line:
             if line == "/*! START TRANSACTION */;\n":
-                transaction_id = db_start_transaction()
+                sql = ""
             elif line == "/*! COMMIT */;\n":
-                status = db_commit_transaction(transaction_id)
-                print("commit a transaction: "+ status)
+                upload_transaction(sql, transaction_no)
+                print("sent a transaction of %d" % len(sql))
+                transaction_no += 1
             else:
                 sql += line
-                if line.endswith(";\n"):
-                    db_execute_sql(sql, transaction_id)
-                    sql = ""
             line = fp.readline()
-        print("Processed")
+        print("Processed " + file_path)
+
+
+def run_transaction(event, context):
+    DOWNLOAD_DIR = "/tmp/ecor_transactions_download"
+
+    start_time = time.time()
+    transaction_id = db_start_transaction()
+
+    record = event['Records'][0]
+    s3bucket = record['s3']['bucket']['name']
+    s3object = record['s3']['object']['key']
+
+    print("Downloading " + s3object)
+    file_path = os.path.join(DOWNLOAD_DIR, s3object)
+    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+    s3_client.download_file(s3bucket, s3object, file_path)
+
+    with open(file_path) as fp:
+        line = fp.readline()
+        sql = ""
+        while line:
+            if line.endswith(";\n"):
+                sql += line
+                db_execute_sql(sql, transaction_id)
+                sql = ""
+            else:
+                sql += line
+            line = fp.readline()
+
+    status = db_commit_transaction(transaction_id)
+    os.remove(file_path)
+    s3_client.delete_object(Bucket=bucket_name, Key=s3object)
+    end_time = time.time()
+    print("Commited a transaction: " + status + " " + file_path + " for %d seconds" % (end_time - start_time))
+
+
+def upload_transaction(sql, transaction_no):
+    UPLOAD_DIR = "/tmp/ecor_transactions_upload"
+    filename = "%d.sql" % transaction_no
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    with open(file_path, 'w+') as fp:
+        fp.write(sql)
+    try:
+        s3_client.upload_file(file_path, bucket_name, filename)
+    except ClientError as e:
+        logging.error(e)
+        return False
+    os.remove(file_path)
+    return True
+
 
 def db_start_transaction():
     response = rds_client.begin_transaction(
